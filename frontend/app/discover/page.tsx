@@ -64,7 +64,7 @@ const getRecommendations = async (
 	// 	}
 	// );
 	const response = await fetch(
-		`${process.env.NEXT_PUBLIC_API_URL}/api/recommend`,
+		'/api/recommend',
 		{
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
