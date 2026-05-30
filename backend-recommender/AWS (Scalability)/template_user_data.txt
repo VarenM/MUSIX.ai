@@ -2,7 +2,7 @@
 
 # Update and install dependencies
 apt-get update -y
-apt-get install -y unzip curl python3-pip
+apt-get install -y unzip curl python3-pip python3.10-venv
 
 # Create a working directory
 mkdir -p /home/ubuntu/recommender
@@ -17,8 +17,8 @@ sudo ./aws/install
 # Add AWS to PATH
 export PATH=$PATH:/usr/local/bin
 
-# Download project files from S3 (choose which server to run, either "no spotify.py" or "server.py")
-/usr/local/bin/aws s3 cp s3://recommender-dependencies-bucket/server.py /home/ubuntu/recommender/
+# Download project files from S3 (choose which server to run, either "no_spotify.py" or "server.py")
+/usr/local/bin/aws s3 cp s3://recommender-dependencies-bucket/no_spotify.py /home/ubuntu/recommender/
 /usr/local/bin/aws s3 cp s3://recommender-dependencies-bucket/requirements.txt /home/ubuntu/recommender/
 /usr/local/bin/aws s3 cp s3://recommender-dependencies-bucket/.env /home/ubuntu/recommender/
 
@@ -41,4 +41,4 @@ source .env
 set +a
 
 # Run the Flask server and redirect logs to ~/recommender/server.log
-nohup python3 server.py > /home/ubuntu/recommender/server.log 2>&1
+nohup python3 no_spotify.py > /home/ubuntu/recommender/server.log 2>&1

@@ -55,15 +55,22 @@ const getRecommendations = async (
 	recommendations: Message['recommendations'];
 	requestedSong: Message['requestedSong'];
 }> => {
+	// const response = await fetch(
+	// 	'https://00db-3-138-102-164.ngrok-free.app/api/recommend', // change before class
+	// 	{
+	// 		method: 'POST',
+	// 		headers: { 'Content-Type': 'application/json' },
+	// 		body: JSON.stringify({ spotify_url }),
+	// 	}
+	// );
 	const response = await fetch(
-		'https://00db-3-138-102-164.ngrok-free.app/api/recommend', // change before class
+		`${process.env.NEXT_PUBLIC_API_URL}/api/recommend`,
 		{
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ spotify_url }),
 		}
 	);
-
 	if (!response.ok) throw new Error('Failed to fetch recommendations');
 	const data = await response.json();
 
