@@ -134,8 +134,15 @@ class KNNRecommender:
                 genres = []
 
             if not genres:
-                print("No genres from MusicBrainz, falling back to track name/artist lookup")
-                genres = ["pop"]  # safe default
+                print(f"No genres from MusicBrainz for '{track_name}'. Falling back to OpenAI prediction...")
+                estimated_data = self.obtain_genre(track_name, artist_name, release_year)
+                
+                if estimated_data and "genre" in estimated_data:
+                    genres = [estimated_data["genre"]]
+                    print(f"OpenAI fallback selected genre: {genres}")
+                else:
+                    print("OpenAI prediction failed or returned malformed data. Applying ultimate safety fallback.")
+                    genres = ["rap"]  # Or choose a broad category that fits your core dataset target best
 
             return artist_name, track_name, genres, release_year
         except Exception as e:
@@ -258,7 +265,7 @@ class KNNRecommender:
             # for offset in [0, 50, 100, 150]:  # Up to 200 results
             for offset in [0, 10, 20, 30]:
                 results = sp.search(q=genre_query, type='track', limit=10, offset=offset, market='US')['tracks']['items']
-                for t in results:
+                for t in results:        
                     release_date = t['album'].get('release_date')
                     if release_date:
                         try:
@@ -273,6 +280,7 @@ class KNNRecommender:
                                     }
                         except ValueError:
                             continue
+
 
         # ---- Part 2: Get tracks from related artists with overlapping genres and year filtering ----
         # try:
