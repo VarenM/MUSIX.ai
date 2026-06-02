@@ -44,7 +44,18 @@ class KNNRecommender:
         self.exit_loop = False  # a flag for exiting recursive calls in get_spot_recommendations function
         self.scaler = StandardScaler()
         self.recommendations = recommendations  # number of recommendations given for a song
-        self.main_kaggle_genres = ["edm", "rap", "pop", "r&b", "latin", "rock"]
+        # self.main_kaggle_genres = ["edm", "rap", "pop", "r&b", "latin", "rock"]
+
+        self.main_kaggle_genres = [
+            # main genres
+            "edm", "latin", "pop", "r&b", "rap", "rock",
+            # subgenres
+            "album rock", "big room", "classic rock", "dance pop", "electro house",
+            "electropop", "gangster rap", "hard rock", "hip hop", "hip pop",
+            "indie poptimism", "latin hip hop", "latin pop", "neo soul", "new jack swing",
+            "permanent wave", "pop edm", "post-teen pop", "progressive electro house",
+            "reggaeton", "southern hip hop", "trap", "tropical", "urban contemporary"
+        ]
         # S3 read logic
         s3 = boto3.client('s3')
         obj = s3.get_object(
@@ -244,8 +255,9 @@ class KNNRecommender:
         # ---- Part 1: Get tracks by genre ----
         for genre in selected_genres:
             genre_query = f'genre:"{genre}"'
-            for offset in [0, 50, 100, 150]:  # Up to 200 results
-                results = sp.search(q=genre_query, type='track', limit=50, offset=offset)['tracks']['items']
+            # for offset in [0, 50, 100, 150]:  # Up to 200 results
+            for offset in [0, 10, 20, 30]:
+                results = sp.search(q=genre_query, type='track', limit=10, offset=offset, market='US')['tracks']['items']
                 for t in results:
                     release_date = t['album'].get('release_date')
                     if release_date:
@@ -263,19 +275,19 @@ class KNNRecommender:
                             continue
 
         # ---- Part 2: Get tracks from related artists with overlapping genres and year filtering ----
-        try:
-            related_artists_response = sp.artist_related_artists(artist_id)
-            related_artists = related_artists_response.get('artists', [])
+        # try:
+        #     related_artists_response = sp.artist_related_artists(artist_id)
+        #     related_artists = related_artists_response.get('artists', [])
 
-            # Filter related artists by shared genres
-            filtered_artists = [a for a in related_artists if artist_genres & set(a['genres'])]
-            filtered_artists = filtered_artists[:num_related_artists]
-        except SpotifyException as e:
-            if e.http_status == 404:
-                print(f"Artist ID {artist_id} has no related artists or is invalid. Skipping related artists.")
-                filtered_artists = []  # Proceed with genre-based recommendations only
-            else:
-                raise  # Re-raise for other HTTP errors
+        #     # Filter related artists by shared genres
+        #     filtered_artists = [a for a in related_artists if artist_genres & set(a['genres'])]
+        #     filtered_artists = filtered_artists[:num_related_artists]
+        # except SpotifyException as e:
+        #     if e.http_status == 404:
+        #         print(f"Artist ID {artist_id} has no related artists or is invalid. Skipping related artists.")
+        #         filtered_artists = []  # Proceed with genre-based recommendations only
+        #     else:
+        #         raise  # Re-raise for other HTTP errors
         filtered_artists = []  # Skip related artist step
 
         for artist in filtered_artists:
@@ -615,8 +627,8 @@ def api_recommend():
                 "genre": spotify_info['genre'],
                 "release_date": spotify_info['release_date']
             })
-        if not recommendations_list:
-            return None
+    if not recommendations_list:
+        return None
     
     return jsonify({
         "input_track_title": song_info['title'],
