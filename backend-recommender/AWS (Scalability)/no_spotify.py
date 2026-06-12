@@ -543,6 +543,8 @@ class KNNRecommender:
 
             return recommendations[['track_name', 'track_artist', 'playlist_genre', 'playlist_subgenre', 'track_album_release_date']].head(songs_to_return)
 
+recommender = KNNRecommender()
+
 # API Endpoint
 @app.route('/api/recommend', methods=['POST'])
 def api_recommend():
@@ -551,7 +553,6 @@ def api_recommend():
     spotify_url = data.get("spotify_url")
     if not spotify_url:
         return jsonify({"error": "Spotify URL is required."}), 400
-    recommender = KNNRecommender()
     track_id = recommender.extract_track_id(spotify_url)
     if not track_id:
         return jsonify({"error": "Invalid Spotify URL."}), 400

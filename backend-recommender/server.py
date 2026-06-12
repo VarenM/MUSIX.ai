@@ -15,13 +15,12 @@ from spotipy.oauth2 import SpotifyClientCredentials
 # from sklearn.discriminant_analysis import StandardScaler
 import boto3
 from io import StringIO
-from sklearn.preprocessing import StandardScaler  # replaces discriminant_analysis version (why do we do this?)
+from sklearn.preprocessing import StandardScaler  # replaces discriminant_analysis version
 
 import musicbrainzngs
 musicbrainzngs.set_useragent("music-recommender", "1.0", "your@email.com")
 
 load_dotenv()
-# load_dotenv('/home/ubuntu/recommender/.env')
 
 app = Flask(__name__)
 CORS(app)
@@ -44,7 +43,6 @@ class KNNRecommender:
         self.exit_loop = False  # a flag for exiting recursive calls in get_spot_recommendations function
         self.scaler = StandardScaler()
         self.recommendations = recommendations  # number of recommendations given for a song
-        # self.main_kaggle_genres = ["edm", "rap", "pop", "r&b", "latin", "rock"]
 
         self.main_kaggle_genres = [
             # main genres
@@ -72,6 +70,34 @@ class KNNRecommender:
     def extract_track_id(url):
         match = re.search(r"track/([a-zA-Z0-9]+)", url)
         return match.group(1) if match else None
+    
+    @staticmethod
+    def get_related_artists(artist_name, num_artists=5):
+        prompt = f"""
+        Given the artist {artist_name}, suggest {num_artists} similar artists in the same genre.
+        Return as JSON array of artist names only.
+        Example: ["Artist A", "Artist B", "Artist C"]
+        Do not include any markdown code blocks (no triple backticks). Only return raw JSON.
+        """
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-4o",  # or "gpt-3.5-turbo" if you prefer
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=300,
+            )
+
+            generated_text = response['choices'][0]['message']['content'].strip()
+
+            # Parse the JSON output safely
+            features = json.loads(generated_text)
+
+            # Return the features as a Python dictionary
+            return features
+
+        except Exception as e:
+            print(f"Error during OpenAI API call: {e}")
+            return None
 
     # uses OpenAI to find a song genre if not given in dataset or Spotify API
     @staticmethod
@@ -104,10 +130,10 @@ class KNNRecommender:
             generated_text = response['choices'][0]['message']['content'].strip()
 
             # Parse the JSON output safely
-            features = json.loads(generated_text)
+            artists = json.loads(generated_text)
 
             # Return the features as a Python dictionary
-            return features
+            return artists
 
         except Exception as e:
             print(f"Error during OpenAI API call: {e}")
@@ -148,26 +174,6 @@ class KNNRecommender:
         except Exception as e:
             print(f"get_spotify_song_info error: {e}")
             return None, None, None, None
-    # def get_spotify_song_info(self, track_id):
-    #     try:
-    #         track = sp.track(track_id)
-    #         artist_id = track['artists'][0]['id']
-    #         artist_info = sp.artist(artist_id)
-    #         track_name = track['name']
-    #         artist_name = track['artists'][0]['name']
-    #         artist_genres = artist_info['genres']
-    #         release_year = int(track['album']['release_date'][:4])
-    #         if not artist_genres:
-    #             print("Original artist has no spotify genre info...obtaining info from openai")
-    #             estimated_genre = self.obtain_genre(track_name, artist_name, release_year)
-    #             genre = [estimated_genre.get("genre")]
-    #             print(f"estimated genre: {genre}")
-    #             return artist_name, track_name, genre, release_year
-    #         print(f"spotify genres: {artist_genres}")
-    #         return artist_name, track_name, artist_genres, release_year
-    #     except Exception as e:
-    #         print(f"get_spotify_song_info error: {e}")
-    #         return None, None, None, None
 
     # sets up our KNN model which will be used to find similar songs based on certain features
     def getNearestNeighbors(self):
@@ -235,12 +241,14 @@ class KNNRecommender:
         
         # Step 2: Get the artist's genres
         if retry or genre is not None:
-            print("we are retrying search with openai provided genre")
+            # print("we are retrying search with openai provided genre")
             artist_genres = genre
             print(f"estimated genre: {genre}")
             if genre in self.main_kaggle_genres:
+                print("we are going back to recommend songs, which should only happen if the release year was greater than 2019 and artists genres are in dataset")
                 return self.recommend_songs(track_id, songs_to_return, artist_name=artist_name, song_name=track_name, spotify_genres=artist_genres, spotify_release_year=original_release_year)
         else:
+            print("if no genres are found we should prolly call openai here?")
             artist_info = sp.artist(artist_id)
             artist_genres = set(artist_info['genres'])
             if not artist_genres:
@@ -260,10 +268,17 @@ class KNNRecommender:
         track_dict = {}  # key = track ID, value = track info
 
         # ---- Part 1: Get tracks by genre ----
-        for genre in selected_genres:
+        # for genre in selected_genres:
+        # for genre in selected_genres[:3]:  # limit to top 3 to save requests
+        #     genre_query = f'genre:"{genre}"'
+        #     # for offset in [0, 50, 100, 150]:  # Up to 200 results
+        #     for offset in [0, 10, 20, 30]:
+
+        print("finding songs in same genres")
+        for genre in selected_genres[:3]:  # limit to top 3 to save requests
             genre_query = f'genre:"{genre}"'
-            # for offset in [0, 50, 100, 150]:  # Up to 200 results
-            for offset in [0, 10, 20, 30]:
+            for offset in [0, 10, 20]:  # gets ~30 results per genre
+                # results = sp.search(q=genre_query, type='track', limit=10, offset=offset)['tracks']['items']
                 results = sp.search(q=genre_query, type='track', limit=10, offset=offset, market='US')['tracks']['items']
                 for t in results:        
                     release_date = t['album'].get('release_date')
@@ -272,55 +287,96 @@ class KNNRecommender:
                             release_year = int(release_date[:4])
                             if min_year <= release_year <= max_year:
                                 if t['id'] != original_track_id and t['id'] not in track_dict:
-                                    track_dict[t['id']] = {
-                                        'track_name': t['name'],
-                                        'track_artist': t['artists'][0]['name'],
-                                        'release_date': release_date,
-                                        'source': 'genre'
-                                    }
+                                    track_name = t['name']
+                                    track_artist = t['artists'][0]['name']
+                                    
+                                    # Check if this song (by name/artist) already exists
+                                    duplicate = any(
+                                        existing['track_name'].lower() == track_name.lower() and
+                                        existing['track_artist'].lower() == track_artist.lower()
+                                        for existing in track_dict.values()
+                                    )
+                                    
+                                    if not duplicate:
+                                        track_dict[t['id']] = {
+                                            'track_name': track_name,
+                                            'track_artist': track_artist,
+                                            'release_date': release_date,
+                                            'source': 'genre'
+                                        }
+
                         except ValueError:
                             continue
 
-
         # ---- Part 2: Get tracks from related artists with overlapping genres and year filtering ----
-        # try:
-        #     related_artists_response = sp.artist_related_artists(artist_id)
-        #     related_artists = related_artists_response.get('artists', [])
+        artist = track['artists'][0]['name']
+        print(f"finding related artists for {artist}")
+        related_artists = self.get_related_artists(artist)
+        print(f"found related artists: {related_artists}")
+        # related_artists = []
 
-        #     # Filter related artists by shared genres
-        #     filtered_artists = [a for a in related_artists if artist_genres & set(a['genres'])]
-        #     filtered_artists = filtered_artists[:num_related_artists]
-        # except SpotifyException as e:
-        #     if e.http_status == 404:
-        #         print(f"Artist ID {artist_id} has no related artists or is invalid. Skipping related artists.")
-        #         filtered_artists = []  # Proceed with genre-based recommendations only
-        #     else:
-        #         raise  # Re-raise for other HTTP errors
-        filtered_artists = []  # Skip related artist step
+        if related_artists:
+            filtered_artists = []
+            for artist_name in related_artists:
+                try:
+                    search_results = sp.search(q=artist_name, type='artist', limit=1)
+                    if search_results['artists']['items']:
+                        filtered_artists.append(search_results['artists']['items'][0])
+                except:
+                    continue
+            filtered_artists = filtered_artists[:num_related_artists]
+        else:
+            filtered_artists = []
 
+        print("finding songs by related artists...")
         for artist in filtered_artists:
-            top_tracks = sp.artist_top_tracks(artist['id'], country='US')['tracks']
-            for t in top_tracks[:tracks_per_artist]:
-                album = sp.album(t['album']['id'])
-                release_date = album.get('release_date')
-                if release_date:
-                    try:
-                        release_year = int(release_date[:4])
-                        if min_year <= release_year <= max_year:
-                            if t['id'] != original_track_id and t['id'] not in track_dict:
-                                track_dict[t['id']] = {
-                                    'track_name': t['name'],
-                                    'track_artist': artist['name'],
-                                    'release_date': release_date,
-                                    'source': 'related_artist'
-                                }
-                    except ValueError:
-                        continue
+            artist_name = artist['name']
+            
+            # Search for tracks by this artist within the year range
+            for offset in [0, 10, 20, 30]:
+                try:
+                    results = sp.search(
+                        q=f'artist:"{artist_name}"',
+                        type='track',
+                        limit=10,
+                        offset=offset,
+                        market='US'
+                    )['tracks']['items']
+                    
+                    for t in results:
+                        release_date = t['album'].get('release_date')
+                        if release_date:
+                            try:
+                                release_year = int(release_date[:4])
+                                if min_year <= release_year <= max_year:
+                                    if t['id'] != original_track_id and t['id'] not in track_dict:
+                                        # dedup check
+                                        track_name = t['name']
+                                        track_artist = t['artists'][0]['name']
+                                        
+                                        duplicate = any(
+                                            existing['track_name'].lower() == track_name.lower() and
+                                            existing['track_artist'].lower() == track_artist.lower()
+                                            for existing in track_dict.values()
+                                        )
+                                        
+                                        if not duplicate:
+                                            track_dict[t['id']] = {
+                                                'track_name': track_name,
+                                                'track_artist': track_artist,
+                                                'release_date': release_date,
+                                                'source': 'related_artist'
+                                            }
+                            except ValueError:
+                                continue
+                except Exception as e:
+                    print(f"Error searching for {artist_name}: {e}")
+                    continue
 
         # ---- Final step: Sample and return as DataFrame ----
         if not track_dict:
             if self.exit_loop == False:
-                print("no genre info...retry?")
+                print("somehow failed in getting recommendations via spotify/openai...retrying...")
                 self.exit_loop = True
                 estimated_features = self.get_estimated_audio_features(track_name, artist_name, artist_genres, original_release_year)
                 print(estimated_features)
@@ -331,6 +387,7 @@ class KNNRecommender:
                 return pd.DataFrame(columns=['track_name', 'track_artist', 'release_date', 'source'])
 
         all_unique_tracks = list(track_dict.values())
+        print(f"found {len(all_unique_tracks)} songs to recommend, sampling {min(genre_sample_size, len(all_unique_tracks))}")
         sampled_tracks = random.sample(all_unique_tracks, min(genre_sample_size, len(all_unique_tracks)))
 
         sampled_df = pd.DataFrame(sampled_tracks, columns=[
@@ -411,10 +468,12 @@ class KNNRecommender:
             songs_to_return = self.recommendations
 
         # Use Spotify API to get genre and release year
+        print(f"obtaining artist name, song name, release year from spotify....genres from musicbrainz")
         if artist_name is None and song_name is None and spotify_genres is None and spotify_release_year is None:
             artist_name, song_name, spotify_genres, spotify_release_year = self.get_spotify_song_info(track_id)
 
         if (len(spotify_genres) == 1) and (spotify_genres[0] not in self.main_kaggle_genres) or spotify_release_year > 2019 or (not any(g in self.main_kaggle_genres for g in spotify_genres)):
+            print("unfortunately song exceeds 2019, or genres not in data; using spotify/openai for recs")
             return self.get_spot_recommendations(artist_name, song_name, track_id, genre=spotify_genres)
 
         if not spotify_genres or spotify_release_year is None:
