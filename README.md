@@ -74,7 +74,7 @@ python server.py
 
 ---
 
-## Ngrok Tunnel for React Frontend
+## Optional Ngrok Tunnel for React Frontend (can skip if using load balancer with dns in AWS)
 
 In a separate terminal window, SSH into the EC2 again and set up ngrok:
 
@@ -128,6 +128,7 @@ Follow these steps to get it running:
 In your frontend code (likely in `frontend/app/discover/page.tsx`):
 
 -   Replace the current API URL with your **ngrok forwarding address** (e.g., `https://abc123.ngrok.io`).
+-   or keep as is and make sure in vercel you add an environment variable called "API_URL" where you include the load balancer dns name (avoids NGROK completely)
 
 ```tsx
 const response = await fetch('https://abc123.ngrok.io/api/recommend', {
