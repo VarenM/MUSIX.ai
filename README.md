@@ -172,6 +172,7 @@ Upload the following files to your designated S3 bucket:
 -   `.env`
 -   `requirements.txt`
 -   `no_spotify.py`
+-   `spotify_songs.csv`
 
 ---
 
