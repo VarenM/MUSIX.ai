@@ -155,7 +155,7 @@ The app will be available at [http://localhost:3000](http://localhost:3000)
 This section outlines how to set up the infrastructure for scaling and deploying the music recommender backend on AWS.
 
 ### Notes
-
+- Will Likely need to use python 3.10 environment so i suggest downloading community ami: Ubuntu 22.04 LTS - Jammy
 -   TO TEST SCALABILITY, use the `no_spotify.py` file. It disables all external Spotify and OpenAI API calls to avoid rate limits.  
     Default setup tests recommendations for "Stairway to Heaven" by Led Zeppelin.  
     To change, update the track and artist name in the `recommend_songs()` function.
